@@ -96,7 +96,7 @@ Color is decoration only; glyphs and text carry the meaning. In terminals that s
   "keywords": ["pi-package", "pi-extension", "pi", "goal", "goal-mode", "autonomous-agent", "status-line", "agent"],
   "pi": {
     "extensions": ["./extensions/goal.ts"],
-    "image": "https://raw.githubusercontent.com/nqh-packages/pi-goal/main/assets/pi-goal-status.png"
+    "image": "https://unpkg.com/@qhn/pi-goal@0.2.0/assets/pi-goal-status.png"
   }
 }
 ```
