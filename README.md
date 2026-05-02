@@ -127,6 +127,6 @@ The `image` field is package-gallery metadata for `pi.dev/packages`; the extensi
 
 ## Publish
 
-This local `.pi` copy is not the release authority. Sync changes to `github.com/nqh-packages/pi-goal` and publish through the trusted-publishing GitHub Actions workflow.
+`/Users/huy/.pi/agent/local-packages/goal` is the canonical local source directory. The public repo at `github.com/nqh-packages/pi-goal` is a projection of this directory for GitHub trusted publishing.
 
-Do not run `npm publish` from this directory.
+Do not run `npm publish` locally. Publish by projecting this directory to the release repo and pushing a version tag, which runs `.github/workflows/publish.yml` with npm trusted publishing.

@@ -12,16 +12,17 @@ This extension gives Pi a setup-first Codex-like long-running goal mode: Huy sta
 
 | Concern | Owner |
 |---------|-------|
-| Canonical release repository | `https://github.com/nqh-packages/pi-goal` |
+| Canonical local source directory | `/Users/huy/.pi/agent/local-packages/goal` |
+| Public release repository | `https://github.com/nqh-packages/pi-goal` as a projection of this directory |
 | npm package | `@qhn/pi-goal` |
-| Local `.pi` copy | Development/source mirror for Huy's global Pi runtime, not the release authority |
-| Release mechanism | GitHub Actions trusted publishing from `nqh-packages/pi-goal` only |
-| Local publishing rule | Do not run `npm publish` from `/Users/huy/.pi/agent/local-packages/goal`; sync to the release repo and publish by workflow/tag |
+| Release mechanism | GitHub Actions trusted publishing from the projected package repo |
+| Local publishing rule | Do not run `npm publish` locally; publish by projecting this directory to the release repo and tagging |
 
 | Path | Role |
 |------|------|
 | `extensions/goal.ts` | Runtime entrypoint for `/goal`, goal tools, continuation prompts, state persistence, and status-line UI |
 | `index.test.mjs` | Regression coverage for setup, tools, continuation, persistence, command parsing, and stop conditions |
+| `.github/workflows/publish.yml` | Trusted publishing workflow projected into the public release repo |
 | `package.json` | Pi package manifest, gallery metadata, and npm publishing metadata |
 | `assets/pi-goal-status.png` | Pi package gallery preview image |
 | `README.md` | Public installation, usage, and publishing guidance |
@@ -79,7 +80,7 @@ This package intentionally does not use Varlock yet.
 | Tool schema or tool behavior | Verify `goal_set`, `goal_get`, `goal_status_line`, and `goal_complete` registration and completion-only behavior |
 | Prompt text changes | Check that the objective remains wrapped as untrusted data and that completion still requires an evidence audit |
 | Any TypeScript edit | Run `npm test`, `npm run verify:pi`, and `npm run verify:package` from the package root |
-| Package manifest, gallery asset, or README edit | Run `npm run verify:package` and `npm run pack:dry-run` from the package root |
+| Package manifest, gallery asset, README, or publish workflow edit | Run `npm run verify:package` and `npm run pack:dry-run` from the package root |
 
 ## Testing Strategy
 
