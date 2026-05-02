@@ -1,6 +1,6 @@
 {
   "name": "@qhn/pi-goal",
-  "version": "0.0.1",
+  "version": "0.1.1",
   "description": "Long-running goal mode extension for pi.",
   "type": "module",
   "license": "MIT",
@@ -36,6 +36,12 @@
     "@mariozechner/pi-agent-core": "*",
     "@mariozechner/pi-coding-agent": "*",
     "typebox": "*"
+  },
+  "devDependencies": {
+    "@mariozechner/pi-ai": "^0.72.0",
+    "@mariozechner/pi-agent-core": "^0.72.0",
+    "@mariozechner/pi-coding-agent": "^0.72.0",
+    "typebox": "^1.1.37"
   },
   "pi": {
     "extensions": [

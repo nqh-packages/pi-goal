@@ -22,10 +22,23 @@ This extension gives Pi a Codex-like long-running goal mode: Huy can set one obj
 | `/goal` command behavior | `extensions/goal.ts` |
 | Goal state entry schema | `extensions/goal.ts` `GoalEntry` / `GoalState` |
 | Agent-facing `get_goal` and `update_goal` tools | `extensions/goal.ts` |
-| Automatic continuation prompt | `extensions/goal.ts` `continuationPrompt()` |
-| Budget wrap-up prompt | `extensions/goal.ts` `budgetLimitPrompt()` |
+| Automatic continuation prompt | `extensions/goal/prompts.ts` `continuationPrompt()` |
+| Budget wrap-up prompt | `extensions/goal/prompts.ts` `budgetLimitPrompt()` |
 | UI status and widget text | `extensions/goal.ts` `updateStatus()` |
 | Auto-pause/no-work suppression | `extensions/goal.ts` `agent_end` handler |
+| Goal debug mode and evlog-compatible events | `extensions/goal/debug.ts` |
+
+## Environment Governance Exception
+
+This package intentionally does not use Varlock yet.
+
+| Field | Exception |
+|-------|-----------|
+| Env/config owner | GitHub Actions trusted publishing workflow in `.github/workflows/publish.yml` |
+| Validation mechanism | `npm test`, `npm run verify:pi`, `npm run verify:package`, and `npm run pack:dry-run` must pass before publishing |
+| Secret-leak protection | Trusted publishing uses GitHub OIDC with `id-token: write`; no `NPM_TOKEN`, OTP, or registry secret is stored in repo secrets |
+| Migration trigger | Add `.env.schema` before introducing any runtime environment variable, npm token secret, external drain token, or configurable secret |
+| Verification command | `rg -n "NPM_TOKEN|NODE_AUTH_TOKEN|_TOKEN|_SECRET|API_KEY" .github package.json README.md AGENTS.md` should find no publish secret requirement |
 
 ## Runtime Rules
 
@@ -35,6 +48,7 @@ This extension gives Pi a Codex-like long-running goal mode: Huy can set one obj
 | Autonomous continuation | Active goals must schedule hidden follow-up turns while Pi is idle and no user messages are pending |
 | User input wins | Never continue over queued or pending user input |
 | No-work stop | If an automatic continuation turn ends without tool calls, pause continuation and require `/goal resume` |
+| Debug mode | `/goal debug on` records session-local evlog-compatible debug events as custom entries; no ad hoc console diagnostics |
 | Completion is explicit | Agents should call `update_goal` with `status: "complete"` only after an evidence audit proves the objective is done |
 | Completion tool is narrow | `update_goal` must not support pause, resume, budget changes, or arbitrary state mutation |
 | State is session-local | Persist goal state as custom session entries; do not create a second global database for goals |
@@ -46,6 +60,7 @@ This extension gives Pi a Codex-like long-running goal mode: Huy can set one obj
 |--------|-----------------------|
 | Command parsing or state transitions | Add or update focused regression tests before changing runtime behavior |
 | Continuation scheduling | Prove active goal, pending-user-input, idle, and no-work suppression cases |
+| Debug mode behavior | Prove debug toggle persistence and evlog-compatible event shape |
 | Tool schema or tool behavior | Verify `get_goal` / `update_goal` registration and completion-only behavior |
 | Prompt text changes | Check that the objective remains wrapped as untrusted data and that completion still requires an evidence audit |
 | Any TypeScript edit | Run `npm test`, `npm run verify:pi`, and `npm run verify:package` from the package root |

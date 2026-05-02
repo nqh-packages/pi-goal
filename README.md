@@ -16,6 +16,7 @@ So I ported the idea over. A small goal loop for pi.
 | Hidden continuation | Schedules follow-up turns while pi is idle |
 | User-input safety | Never continues over queued or pending user messages |
 | No-work suppression | Pauses if an automatic turn ends without tool calls |
+| Debug mode | `/goal debug on` records evlog-compatible session events for the continuation loop |
 | Session-local state | Stores goal state in pi session entries, not a separate database |
 
 ## Install
@@ -45,6 +46,8 @@ pi -e .
 /goal status
 /goal pause
 /goal resume
+/goal debug on
+/goal debug status
 /goal clear
 ```
 
@@ -79,9 +82,16 @@ npm run pack:dry-run
 
 Small and honest for now.
 
-- Grill unclear goals before starting, so pi does not run with a vague objective.
-- Better `/goal` subcommands with clearer display modes.
+Done in this direction:
+
+- Vague one-word goals ask for a concrete outcome before continuation starts.
+- `/goal help` and `/goal debug [on|off|status]` make the command surface less guessy.
+- Debug mode writes evlog-compatible session events for start, resume, queue, budget limit, and no-work suppression.
+
+Still worth improving:
+
 - More polished UI/status for active, paused, blocked, and complete goals.
+- A richer debug event viewer if session entries become too noisy to inspect by hand.
 
 ## Publish
 

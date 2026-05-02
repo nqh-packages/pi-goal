@@ -32,7 +32,8 @@ async function createHarness(options = {}) {
 	);
 	const extension = result.extensions[0];
 	const sentMessages = [];
-	const entries = [];
+	const entries = [...(options.entries ?? [])];
+	const branchEntries = options.branchEntries ?? entries;
 	const notifications = [];
 	const statuses = [];
 	const widgets = [];
@@ -44,6 +45,7 @@ async function createHarness(options = {}) {
 	result.runtime.appendEntry = (customType, data) => {
 		const entry = { type: "custom", customType, data };
 		entries.push(entry);
+		if (branchEntries !== entries) branchEntries.push(entry);
 		return entry;
 	};
 
@@ -52,12 +54,13 @@ async function createHarness(options = {}) {
 		cwd: PACKAGE_ROOT,
 		sessionManager: {
 			getEntries: () => entries,
+			getBranch: () => branchEntries,
 		},
 		modelRegistry: {},
 		model: undefined,
 		isIdle: () => idle,
 		hasPendingMessages: () => pendingMessages,
-		getContextUsage: () => undefined,
+		getContextUsage: () => options.contextUsage,
 		getSystemPrompt: () => "",
 		compact: () => {},
 		abort: () => {},
@@ -71,6 +74,7 @@ async function createHarness(options = {}) {
 			setStatus: (key, text) => statuses.push({ key, text }),
 			setWidget: (key, lines, widgetOptions) => widgets.push({ key, lines, options: widgetOptions }),
 			confirm: async () => options.confirm ?? true,
+			input: async () => options.input,
 		},
 	};
 
@@ -109,6 +113,29 @@ function latestGoalEntry(harness) {
 	assert.ok(entry, "event=goal_extension.persist actor=extension operation=find_goal_state risk=lost_goal_state expected=custom goal state entry actual=none suggestion=inspect persistGoal");
 	return entry;
 }
+
+const goalEntry = (overrides = {}) => {
+	const timestamp = "2026-05-01T00:00:00.000Z";
+	return {
+		type: "custom",
+		customType: "pi-goal-state",
+		data: {
+			version: 1,
+			goal: {
+				id: overrides.id ?? "goal-test-id",
+				objective: overrides.objective ?? "keep working from branch state",
+				status: overrides.status ?? "active",
+				tokenBudget: overrides.tokenBudget ?? null,
+				tokensUsed: overrides.tokensUsed ?? 0,
+				timeUsedSeconds: overrides.timeUsedSeconds ?? 0,
+				createdAt: overrides.createdAt ?? timestamp,
+				updatedAt: overrides.updatedAt ?? timestamp,
+				continuationSuppressed: overrides.continuationSuppressed ?? false,
+				lastContinuationTurnHadNoTools: overrides.lastContinuationTurnHadNoTools ?? false,
+			},
+		},
+	};
+};
 
 test("registers the Codex-like goal command, tools, and runtime events", async () => {
 	const harness = await createHarness();
@@ -157,6 +184,40 @@ test("does not queue automatic continuation over pending user input", async () =
 	assert.equal(latestGoalEntry(harness).data.goal.status, "active");
 });
 
+test("asks for a clearer objective before starting a vague goal", async () => {
+	const harness = await createHarness({ input: "improve the goal extension status display" });
+
+	await startGoal(harness, "improve");
+
+	assert.equal(latestGoalEntry(harness).data.goal.objective, "improve the goal extension status display");
+	assert.equal(harness.sentMessages.length, 1);
+});
+
+test("shows goal help without starting a continuation", async () => {
+	const harness = await createHarness();
+
+	await harness.command.handler("help", harness.ctx);
+
+	assert.match(harness.notifications.at(-1).message, /\/goal <objective>/);
+	assert.equal(harness.sentMessages.length, 0);
+});
+
+test("debug mode writes evlog-compatible goal events", async () => {
+	const harness = await createHarness();
+
+	await harness.command.handler("debug on", harness.ctx);
+	await startGoal(harness, "debug the continuation loop");
+
+	const debugEntry = harness.entries.toReversed().find((candidate) => candidate.customType === "pi-goal-debug");
+	assert.equal(debugEntry.data.enabled, true);
+	const eventEntry = harness.entries.find((candidate) => candidate.customType === "pi-goal-debug-event");
+	assert.equal(eventEntry.data.service, "pi-goal");
+	assert.equal(eventEntry.data.level, "debug");
+	assert.equal(eventEntry.data.event, "goal.started");
+	assert.equal(eventEntry.data.context.operation, "goal_command");
+	assert.equal(typeof eventEntry.data.timestamp, "string");
+});
+
 test("continues again after an automatic turn performs tool work", async () => {
 	const harness = await createHarness();
 	await startGoal(harness);
@@ -202,4 +263,89 @@ test("update_goal only completes the current goal and preserves usage report det
 	const details = JSON.parse(completed.content[0].text);
 	assert.equal(details.goal.status, "complete");
 	assert.equal(latestGoalEntry(harness).data.goal.status, "complete");
+});
+
+test("counts assistant turn usage and budget-limits the active goal", async () => {
+	const harness = await createHarness();
+	await startGoal(harness, "stop when budget is spent --token-budget 10");
+
+	harness.sentMessages.length = 0;
+	await harness.emit("turn_start");
+	await harness.emit("tool_execution_end");
+	await harness.emit("turn_end", {
+		message: {
+			role: "assistant",
+			content: "spent tokens",
+			usage: { input: 7, output: 5, cacheRead: 0, cacheWrite: 0, totalTokens: 12 },
+		},
+	});
+
+	const goal = latestGoalEntry(harness).data.goal;
+	assert.equal(
+		goal.tokensUsed,
+		12,
+		"event=goal_extension.token_accounting actor=runtime operation=turn_end risk=budget_never_trips expected=tokensUsed includes assistant usage totalTokens actual=tokensUsed unchanged suggestion=inspect turn_end usage accounting",
+	);
+	assert.equal(goal.status, "budget_limited");
+	assert.equal(harness.sentMessages.at(-1).message.customType, "pi-goal-context");
+});
+
+test("restores goal state from the active branch instead of abandoned entries", async () => {
+	const branchGoal = goalEntry({ id: "branch-goal", objective: "continue active branch" });
+	const abandonedGoal = goalEntry({ id: "abandoned-goal", objective: "wrong branch", status: "complete" });
+	const harness = await createHarness({ entries: [branchGoal, abandonedGoal], branchEntries: [branchGoal] });
+
+	await harness.emit("session_start", { reason: "startup" });
+	await new Promise((resolve) => setImmediate(resolve));
+
+	const getGoal = harness.tool("get_goal");
+	const result = await getGoal.execute("call-branch", {}, undefined, undefined, harness.ctx);
+	const details = JSON.parse(result.content[0].text);
+	assert.equal(
+		details.goal.id,
+		"branch-goal",
+		"event=goal_extension.branch_restore actor=runtime operation=session_start risk=wrong_branch_goal_restored expected=active branch goal actual=latest global entry suggestion=use sessionManager.getBranch for state reconstruction",
+	);
+	assert.equal(harness.sentMessages.at(-1).message.details.goalId, "branch-goal");
+});
+
+test("ignores malformed persisted goal entries during session restore", async () => {
+	const malformedEntry = {
+		type: "custom",
+		customType: "pi-goal-state",
+		data: { version: 1, goal: { id: "bad", objective: 123, status: "active" } },
+	};
+	const harness = await createHarness({ entries: [malformedEntry], branchEntries: [malformedEntry] });
+
+	await harness.emit("session_start", { reason: "startup" });
+
+	const getGoal = harness.tool("get_goal");
+	const result = await getGoal.execute("call-malformed", {}, undefined, undefined, harness.ctx);
+	const details = JSON.parse(result.content[0].text);
+	assert.equal(
+		details.goal,
+		null,
+		"event=goal_extension.invalid_state actor=runtime operation=session_start risk=malformed_session_state_poisoning expected=invalid goal ignored actual=invalid goal restored suggestion=validate persisted GoalEntry shape before trusting it",
+	);
+});
+
+test("assistant text cannot bypass update_goal completion", async () => {
+	const harness = await createHarness();
+	await startGoal(harness, "only tool completion counts");
+	harness.sentMessages.length = 0;
+
+	await harness.emit("turn_start");
+	await harness.emit("turn_end", {
+		message: {
+			role: "assistant",
+			content: "[goal complete]",
+			usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 2 },
+		},
+	});
+
+	assert.equal(
+		latestGoalEntry(harness).data.goal.status,
+		"active",
+		"event=goal_extension.completion_authority actor=assistant operation=turn_end risk=agent_bypasses_completion_audit expected=goal remains active until update_goal or user command actual=text marker completed goal suggestion=remove assistant-text completion sentinel",
+	);
 });
