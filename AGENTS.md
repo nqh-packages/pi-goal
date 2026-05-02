@@ -38,7 +38,7 @@ This package intentionally does not use Varlock yet.
 | Validation mechanism | `npm test`, `npm run verify:pi`, `npm run verify:package`, and `npm run pack:dry-run` must pass before publishing |
 | Secret-leak protection | Trusted publishing uses GitHub OIDC with `id-token: write`; no `NPM_TOKEN`, OTP, or registry secret is stored in repo secrets |
 | Migration trigger | Add `.env.schema` before introducing any runtime environment variable, npm token secret, external drain token, or configurable secret |
-| Verification command | `rg -n "NPM_TOKEN|NODE_AUTH_TOKEN|_TOKEN|_SECRET|API_KEY" .github package.json README.md AGENTS.md` should find no publish secret requirement |
+| Verification command | `rg -n "NODE_AUTH_TOKEN|NPM_TOKEN|secrets\\.|npm_[A-Za-z]*token" .github package.json README.md` should produce no matches |
 
 ## Runtime Rules
 
