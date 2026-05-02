@@ -1,0 +1,52 @@
+{
+  "name": "@qhn/pi-goal",
+  "version": "0.1.1",
+  "description": "Long-running goal mode extension for pi.",
+  "type": "module",
+  "license": "MIT",
+  "homepage": "https://github.com/nqh-packages/pi-goal#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nqh-packages/pi-goal.git"
+  },
+  "bugs": {
+    "url": "https://github.com/nqh-packages/pi-goal/issues"
+  },
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "goal",
+    "agent"
+  ],
+  "files": [
+    "AGENTS.md",
+    "LICENSE",
+    "README.md",
+    "extensions/",
+    "index.test.mjs"
+  ],
+  "scripts": {
+    "test": "node --test index.test.mjs",
+    "test:ui": "GOAL_UI_CAPTURE=1 node --test --test-name-pattern \"terminal capture\" index.test.mjs",
+    "verify:pi": "pi --offline --no-extensions --extension ./extensions/goal.ts --version",
+    "verify:package": "pi --offline --no-extensions --extension . --version",
+    "pack:dry-run": "npm pack --dry-run"
+  },
+  "peerDependencies": {
+    "@mariozechner/pi-ai": "*",
+    "@mariozechner/pi-agent-core": "*",
+    "@mariozechner/pi-coding-agent": "*",
+    "typebox": "*"
+  },
+  "devDependencies": {
+    "@mariozechner/pi-ai": "^0.72.0",
+    "@mariozechner/pi-agent-core": "^0.72.0",
+    "@mariozechner/pi-coding-agent": "^0.72.0",
+    "typebox": "^1.1.37"
+  },
+  "pi": {
+    "extensions": [
+      "./extensions/goal.ts"
+    ]
+  }
+}
