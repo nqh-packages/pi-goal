@@ -2,6 +2,8 @@
 
 A setup-first autonomous goal mode for Pi.
 
+This is a public Pi package: it includes the `pi-package` npm keyword and an explicit `pi` manifest in `package.json` so Pi can discover and load the extension from npm, git, or a local path.
+
 Use it when you want Pi to pursue one objective across follow-up turns, but only after the goal contract is clear enough to audit.
 
 ## What it adds
@@ -27,10 +29,14 @@ pi install npm:@qhn/pi-goal
 
 ## Local development
 
+From this package directory:
+
 ```bash
 pi install .
 pi -e .
 ```
+
+For Huy's local Pi runtime, keep `~/.pi/agent/settings.json` pointed at the local package path rather than switching development installs to npm.
 
 ## Usage
 
@@ -70,15 +76,15 @@ goal_complete
 
 | State | Example |
 |-------|---------|
-| Setup | `◌ goal setup: ship the package` |
-| Working | `◴ verifying package` |
-| Paused | `Ⅱ paused: verifying package` |
-| Waiting on user | `? answer needed: choose release target` |
-| Blocked | `BLOCKED! no progress — /goal resume` |
-| Budget blocked | `BLOCKED! budget limit reached` |
-| Done | `✓ done: done`, then clears after the completion turn |
+| Setup | `/goal ◇ setup: ship the package` |
+| Working | `/goal ◇ ◴ verifying package` |
+| Paused | `/goal ◇ Ⅱ paused: verifying package` |
+| Waiting on user | `/goal ◇ ? answer needed: choose release target` |
+| Blocked | `/goal ◇ BLOCKED! no progress — /goal resume` |
+| Budget blocked | `/goal ◇ BLOCKED! budget limit reached` |
+| Done | `/goal ◇ ✓ goal complete`, then clears after the completion turn |
 
-Color is decoration only; glyphs and text carry the meaning.
+Color is decoration only; glyphs and text carry the meaning. In terminals that support ANSI styling, `/goal` is bold and the working clock glyph is yellow.
 
 ## Verification
 
@@ -92,11 +98,28 @@ npm run pack:dry-run
 
 `npm run test:ui` writes visible terminal-render artifacts under `codex-scripts/goal-ui/`.
 
+## Pi package manifest
+
+`package.json` declares the Pi resources explicitly:
+
+```json
+{
+  "keywords": ["pi-package", "pi-extension", "pi", "goal", "goal-mode", "autonomous-agent", "status-line", "agent"],
+  "pi": {
+    "extensions": ["./extensions/goal.ts"],
+    "image": "https://raw.githubusercontent.com/nqh-packages/pi-goal/main/assets/pi-goal-status.png"
+  }
+}
+```
+
+The `image` field is package-gallery metadata for `pi.dev/packages`; the extension itself loads from `./extensions/goal.ts`.
+
 ## Package layout
 
 | Path | Purpose |
 |------|---------|
 | `package.json` | npm metadata and Pi package manifest |
+| `assets/pi-goal-status.png` | Pi package gallery preview image |
 | `extensions/goal.ts` | Pi extension entrypoint |
 | `extensions/goal/` | State, prompt, format, and debug helpers |
 | `index.test.mjs` | Regression tests for command, setup, tools, state, continuation, and UI capture |

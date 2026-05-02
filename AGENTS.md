@@ -22,7 +22,8 @@ This extension gives Pi a setup-first Codex-like long-running goal mode: Huy sta
 |------|------|
 | `extensions/goal.ts` | Runtime entrypoint for `/goal`, goal tools, continuation prompts, state persistence, and status-line UI |
 | `index.test.mjs` | Regression coverage for setup, tools, continuation, persistence, command parsing, and stop conditions |
-| `package.json` | Pi package manifest and npm publishing metadata |
+| `package.json` | Pi package manifest, gallery metadata, and npm publishing metadata |
+| `assets/pi-goal-status.png` | Pi package gallery preview image |
 | `README.md` | Public installation, usage, and publishing guidance |
 
 ## Canonical Owners
@@ -36,6 +37,7 @@ This extension gives Pi a setup-first Codex-like long-running goal mode: Huy sta
 | Automatic continuation prompt | `extensions/goal/prompts.ts` `continuationPrompt()` |
 | Budget wrap-up prompt | `extensions/goal/prompts.ts` `budgetLimitPrompt()` |
 | Status-line text | `extensions/goal/format.ts` |
+| Pi package manifest and gallery metadata | `package.json` / `assets/pi-goal-status.png` |
 | Auto-pause/no-work suppression | `extensions/goal.ts` `agent_end` handler |
 | Evlog-compatible internal debug/audit event helpers | `extensions/goal/debug.ts` |
 
@@ -77,7 +79,7 @@ This package intentionally does not use Varlock yet.
 | Tool schema or tool behavior | Verify `goal_set`, `goal_get`, `goal_status_line`, and `goal_complete` registration and completion-only behavior |
 | Prompt text changes | Check that the objective remains wrapped as untrusted data and that completion still requires an evidence audit |
 | Any TypeScript edit | Run `npm test`, `npm run verify:pi`, and `npm run verify:package` from the package root |
-| Package manifest or README edit | Run `npm run pack:dry-run` from the package root |
+| Package manifest, gallery asset, or README edit | Run `npm run verify:package` and `npm run pack:dry-run` from the package root |
 
 ## Testing Strategy
 

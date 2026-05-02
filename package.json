@@ -1,7 +1,7 @@
 {
   "name": "@qhn/pi-goal",
   "version": "0.1.1",
-  "description": "Long-running goal mode extension for pi.",
+  "description": "Setup-first autonomous goal mode extension for Pi.",
   "type": "module",
   "license": "MIT",
   "homepage": "https://github.com/nqh-packages/pi-goal#readme",
@@ -15,13 +15,18 @@
   "keywords": [
     "pi-package",
     "pi-extension",
+    "pi",
     "goal",
+    "goal-mode",
+    "autonomous-agent",
+    "status-line",
     "agent"
   ],
   "files": [
     "AGENTS.md",
     "LICENSE",
     "README.md",
+    "assets/",
     "extensions/",
     "index.test.mjs"
   ],
@@ -47,6 +52,7 @@
   "pi": {
     "extensions": [
       "./extensions/goal.ts"
-    ]
+    ],
+    "image": "https://raw.githubusercontent.com/nqh-packages/pi-goal/main/assets/pi-goal-status.png"
   }
 }
