@@ -1,25 +1,8 @@
 # @qhn/pi-goal
 
-A setup-first autonomous goal mode for Pi.
+Setup-first autonomous goal mode for Pi.
 
-This is a public Pi package: it includes the `pi-package` npm keyword and an explicit `pi` manifest in `package.json` so Pi can discover and load the extension from npm, git, or a local path.
-
-Use it when you want Pi to pursue one objective across follow-up turns, but only after the goal contract is clear enough to audit.
-
-## What it adds
-
-| Feature | Behavior |
-|---------|----------|
-| `/goal <intent>` | Starts mandatory setup mode; never activates directly |
-| Setup interview | Assistant resolves outcome, done criteria, decision philosophy, and ask-before boundaries |
-| `goal_set` | Activates the latest confirmed setup with one rich objective string |
-| `goal_get` | Lets the agent inspect setup/goal state, budget, usage, and remaining tokens |
-| `goal_status_line` | Lets the agent update short current-progress text in the status line |
-| `goal_complete` | Lets the agent mark the active goal complete after evidence audit |
-| Hidden continuation | Schedules follow-up turns while Pi is idle |
-| User-input safety | Never continues over queued or pending user messages |
-| No-work suppression | Shows `BLOCKED! no progress — /goal resume` after a no-tool automatic turn |
-| Session-local state | Stores setup and goal state in Pi session entries, not a separate database |
+`@qhn/pi-goal` lets Pi pursue one objective across follow-up turns. It does **not** start autonomous work immediately: `/goal <intent>` first opens a setup interview so the assistant and user agree on outcome, done criteria, decision style, and ask-before boundaries.
 
 ## Install
 
@@ -27,50 +10,57 @@ Use it when you want Pi to pursue one objective across follow-up turns, but only
 pi install npm:@qhn/pi-goal
 ```
 
-## Local development
-
-From this package directory:
+Try without installing:
 
 ```bash
-pi install .
-pi -e .
+pi -e npm:@qhn/pi-goal
 ```
 
-For Huy's local Pi runtime, keep `~/.pi/agent/settings.json` pointed at the local package path rather than switching development installs to npm.
+## Commands
 
-## Usage
+| Command | Behavior |
+|---------|----------|
+| `/goal <intent>` | Start setup mode for a new goal |
+| `/goal status` | Show current setup or goal state |
+| `/goal pause` | Pause autonomous continuation |
+| `/goal resume` | Resume a paused or blocked goal |
+| `/goal cancel` | Cancel setup or active goal state |
+| `/goal help` | Show command help |
 
-```text
-/goal ship the package
-/goal status
-/goal pause
-/goal resume
-/goal cancel
-/goal help
-```
+## Agent tools
 
-Flow:
+| Tool | Purpose |
+|------|---------|
+| `goal_set` | Activate the latest confirmed setup after user approval |
+| `goal_get` | Inspect setup/goal state, budget, usage, and remaining tokens |
+| `goal_status_line` | Update short current-progress text in the status line |
+| `goal_complete` | Mark the active goal complete after evidence proves it is done |
+
+`goal_complete` is intentionally narrow. Pause, resume, and cancel stay user-controlled through `/goal` commands.
+
+## Goal flow
 
 ```text
 /goal <intent>
-  -> hidden setup nudge
-  -> assistant interviews in chat
-  -> assistant summarizes contract
-  -> user approves
+  -> Pi asks setup questions
+  -> assistant summarizes the goal contract
+  -> user approves the contract
   -> assistant calls goal_set
-  -> autonomous continuation begins
+  -> Pi continues while idle
+  -> assistant updates progress with goal_status_line
+  -> assistant calls goal_complete only after proof
 ```
 
-Agent tools:
+## Setup contract
 
-```text
-goal_set
-goal_get
-goal_status_line
-goal_complete
-```
+Before activation, the assistant must resolve:
 
-`goal_complete` is intentionally narrow. Pause, resume, and cancel stay user-controlled through `/goal`.
+| Contract part | Meaning |
+|---------------|---------|
+| Outcome | What should be true when the goal finishes |
+| Done criteria | Evidence required before completion |
+| Decision philosophy | How trade-offs should be made during autonomous work |
+| Ask-before boundaries | Actions that require explicit user approval |
 
 ## Status line
 
@@ -86,21 +76,20 @@ goal_complete
 
 Color is decoration only; glyphs and text carry the meaning. In terminals that support ANSI styling, `/goal` is bold and the working clock glyph is yellow.
 
-## Verification
+## Safety rules
 
-```bash
-npm test
-npm run test:ui
-npm run verify:pi
-npm run verify:package
-npm run pack:dry-run
-```
-
-`npm run test:ui` writes visible terminal-render artifacts under `codex-scripts/goal-ui/`.
+| Rule | Behavior |
+|------|----------|
+| Setup first | `/goal <intent>` never activates directly |
+| Explicit approval | `goal_set` requires a confirmed setup contract |
+| User input wins | Pi does not continue over queued or pending user messages |
+| No-work stop | A no-tool autonomous turn blocks with `/goal resume` guidance |
+| Evidence before done | `goal_complete` should be called only after the done criteria are proven |
+| Session-local state | Goal state is stored in Pi session entries, not a separate database |
 
 ## Pi package manifest
 
-`package.json` declares the Pi resources explicitly:
+`package.json` declares the Pi package resources explicitly:
 
 ```json
 {
@@ -112,9 +101,20 @@ npm run pack:dry-run
 }
 ```
 
-The `image` field is package-gallery metadata for `pi.dev/packages`; the extension itself loads from `./extensions/goal.ts`.
+## Development
 
-## Package layout
+```bash
+npm install
+npm test
+npm run test:ui
+npm run verify:pi
+npm run verify:package
+npm run pack:dry-run
+```
+
+`npm run test:ui` writes terminal-render artifacts under `codex-scripts/goal-ui/`; those artifacts are local test output and are not part of the npm package.
+
+## Package contents
 
 | Path | Purpose |
 |------|---------|
@@ -122,11 +122,5 @@ The `image` field is package-gallery metadata for `pi.dev/packages`; the extensi
 | `assets/pi-goal-status.png` | Pi package gallery preview image |
 | `extensions/goal.ts` | Pi extension entrypoint |
 | `extensions/goal/` | State, prompt, format, and debug helpers |
-| `index.test.mjs` | Regression tests for command, setup, tools, state, continuation, and UI capture |
-| `AGENTS.md` | Local ownership and verification law |
-
-## Publish
-
-`/Users/huy/.pi/agent/local-packages/goal` is the canonical local source directory. The public repo at `github.com/nqh-packages/pi-goal` is a projection of this directory for GitHub trusted publishing.
-
-Do not run `npm publish` locally. Publish by projecting this directory to the release repo and pushing a version tag, which runs `.github/workflows/publish.yml` with npm trusted publishing.
+| `index.test.mjs` | Regression tests |
+| `.github/workflows/publish.yml` | Trusted publishing workflow |
