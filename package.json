@@ -1,6 +1,6 @@
 {
   "name": "@qhn/pi-goal",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Setup-first autonomous goal mode extension for Pi.",
   "type": "module",
   "license": "MIT",
