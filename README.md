@@ -31,7 +31,8 @@ pi -e npm:@qhn/pi-goal
 
 | Tool | Purpose |
 |------|---------|
-| `goal_set` | Activate the latest confirmed setup after user approval |
+| `goal_present` | Record the contract (Outcome, Done criteria, Decision philosophy, Ask-before boundaries) when presenting it to the user; call this right when you show the contract |
+| `goal_set` | Activate the latest confirmed setup — checks that `goal_present` was called with a matching objective |
 | `goal_get` | Inspect setup/goal state, budget, usage, and remaining tokens |
 | `goal_status_line` | Update short current-progress text in the status line |
 | `goal_complete` | Mark the active goal complete after evidence proves it is done |
@@ -44,8 +45,9 @@ pi -e npm:@qhn/pi-goal
 /goal <intent>
   -> Pi asks setup questions
   -> assistant summarizes the goal contract
+  -> assistant calls goal_present to record the contract
   -> user approves the contract
-  -> assistant calls goal_set
+  -> assistant calls goal_set (checks goal_present was called + objective match)
   -> Pi continues while idle
   -> assistant updates progress with goal_status_line
   -> assistant calls goal_complete only after proof
@@ -81,7 +83,7 @@ Color is decoration only; glyphs and text carry the meaning. In terminals that s
 | Rule | Behavior |
 |------|----------|
 | Setup first | `/goal <intent>` never activates directly |
-| Explicit approval | `goal_set` requires a confirmed setup contract |
+| Explicit approval | `goal_set` requires `confirmed=true`, a matching objective, and a prior `goal_present` call that recorded the contract |
 | User input wins | Pi does not continue over queued or pending user messages |
 | No-work stop | A no-tool autonomous turn blocks with `/goal resume` guidance |
 | Evidence before done | `goal_complete` should be called only after the done criteria are proven |
@@ -96,7 +98,7 @@ Color is decoration only; glyphs and text carry the meaning. In terminals that s
   "keywords": ["pi-package", "pi-extension", "pi", "goal", "goal-mode", "autonomous-agent", "status-line", "agent"],
   "pi": {
     "extensions": ["./extensions/goal.ts"],
-    "image": "https://unpkg.com/@qhn/pi-goal@0.2.0/assets/pi-goal-status.png"
+    "image": "https://unpkg.com/@qhn/pi-goal@0.3.0/assets/pi-goal-status.png"
   }
 }
 ```
