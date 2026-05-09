@@ -23,15 +23,15 @@ const RICH_OBJECTIVE = [
 ].join("\n");
 
 function resolvePiExtensionLoaderPath() {
-	const localLoaderPath = join(PACKAGE_ROOT, "node_modules", "@mariozechner", "pi-coding-agent", "dist", "core", "extensions", "index.js");
+	const localLoaderPath = join(PACKAGE_ROOT, "node_modules", "@earendil-works", "pi-coding-agent", "dist", "core", "extensions", "index.js");
 	try {
 		require.resolve(localLoaderPath);
 		return localLoaderPath;
 	} catch {
 		const globalNodeModules = execFileSync("npm", ["root", "-g"], { encoding: "utf8", cwd: PACKAGE_ROOT }).trim();
-		const globalLoaderPath = join(globalNodeModules, "@mariozechner", "pi-coding-agent", "dist", "core", "extensions", "index.js");
+		const globalLoaderPath = join(globalNodeModules, "@earendil-works", "pi-coding-agent", "dist", "core", "extensions", "index.js");
 		if (existsSync(globalLoaderPath)) return globalLoaderPath;
-		return "/opt/homebrew/lib/node_modules/@mariozechner/pi-coding-agent/dist/core/extensions/index.js";
+		return "/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/index.js";
 	}
 }
 
@@ -106,7 +106,8 @@ async function startSetup(harness, intent = "redesign the goal mode") {
 
 async function activateGoal(harness, intent = "redesign the goal mode", objective = RICH_OBJECTIVE) {
 	const setup = await startSetup(harness, intent);
-	appendAssistantContractSummary(harness);
+	const presentResult = await harness.tool("goal_present").execute("call-present", { objective }, undefined, undefined, harness.ctx);
+	assert.ok(presentResult, "goal_present should succeed");
 	appendUserApproval(harness);
 	harness.sentMessages.length = 0;
 	const result = await harness.tool("goal_set").execute("call-set", { setup_id: setup.id, confirmed: true, objective }, undefined, undefined, harness.ctx);
@@ -189,7 +190,7 @@ function plain(value) {
 test("registers setup-first goal command, new tools, and runtime events", async () => {
 	const harness = await createHarness();
 	assert.deepEqual([...harness.extension.commands.keys()], ["goal"]);
-	assert.deepEqual([...harness.extension.tools.keys()], ["goal_set", "goal_get", "goal_status_line", "goal_complete"]);
+	assert.deepEqual(new Set(harness.extension.tools.keys()), new Set(["goal_set", "goal_get", "goal_present", "goal_status_line", "goal_complete"]));
 	assert.equal(harness.tool("get_goal"), undefined);
 	assert.equal(harness.tool("update_goal"), undefined);
 	assert.equal(harness.extension.handlers.has("before_agent_start"), false);
@@ -250,55 +251,56 @@ test("quoted reserved words are literal setup intents", async () => {
 	assert.equal(harness.sentMessages.at(-1).message.customType, "pi-goal-setup");
 });
 
-test("goal_set is gated by active setup id, confirmation, and labeled objective", async () => {
+test("goal_set is gated by active setup, confirmation, contract presentation, and objective match", async () => {
 	const harness = await createHarness();
 	const goalSet = harness.tool("goal_set");
+	const goalPresent = harness.tool("goal_present");
+
 	const missingSetup = await goalSet.execute("call-missing", { setup_id: "missing", confirmed: true, objective: RICH_OBJECTIVE }, undefined, undefined, harness.ctx);
 	assert.match(missingSetup.content[0].text, /requires an active \/goal setup/);
+
 	const setup = await startSetup(harness, "redesign goal setup --token-budget 100");
+
 	const stale = await goalSet.execute("call-stale", { setup_id: "old", confirmed: true, objective: RICH_OBJECTIVE }, undefined, undefined, harness.ctx);
 	assert.match(stale.content[0].text, /stale/);
+
 	const unconfirmed = await goalSet.execute("call-unconfirmed", { setup_id: setup.id, confirmed: false, objective: RICH_OBJECTIVE }, undefined, undefined, harness.ctx);
 	assert.match(unconfirmed.content[0].text, /confirmed=true/);
-	const noApproval = await goalSet.execute("call-no-approval", { setup_id: setup.id, confirmed: true, objective: RICH_OBJECTIVE }, undefined, undefined, harness.ctx);
-	assert.match(noApproval.content[0].text, /contract summary followed by explicit user approval/);
-	appendUserApproval(harness, "use repo X");
-	const clarifyingOnly = await goalSet.execute("call-clarifying", { setup_id: setup.id, confirmed: true, objective: RICH_OBJECTIVE }, undefined, undefined, harness.ctx);
-	assert.match(clarifyingOnly.content[0].text, /contract summary followed by explicit user approval/);
-	appendAssistantContractSummary(harness);
-	appendUserApproval(harness, "looks good but do not proceed");
-	const deniedApproval = await goalSet.execute("call-denied-approval", { setup_id: setup.id, confirmed: true, objective: RICH_OBJECTIVE }, undefined, undefined, harness.ctx);
-	assert.match(deniedApproval.content[0].text, /contract summary followed by explicit user approval/);
-	appendUserApproval(harness, "looks good but not yet");
-	const deferredApproval = await goalSet.execute("call-deferred-approval", { setup_id: setup.id, confirmed: true, objective: RICH_OBJECTIVE }, undefined, undefined, harness.ctx);
-	assert.match(deferredApproval.content[0].text, /contract summary followed by explicit user approval/);
-	appendUserApproval(harness);
-	const unapprovedObjective = await goalSet.execute("call-unapproved-objective", { setup_id: setup.id, confirmed: true, objective: RICH_OBJECTIVE.replace("ship", "delete") }, undefined, undefined, harness.ctx);
-	assert.match(unapprovedObjective.content[0].text, /contract summary followed by explicit user approval/);
-	appendAssistantContractSummary(harness, RICH_OBJECTIVE.replace("ship", "revise"));
-	const staleApproval = await goalSet.execute("call-stale-approval", { setup_id: setup.id, confirmed: true, objective: RICH_OBJECTIVE }, undefined, undefined, harness.ctx);
-	assert.match(staleApproval.content[0].text, /contract summary followed by explicit user approval/);
-	appendAssistantContractSummary(harness);
-	appendUserApproval(harness, "sure");
-	const sureApproval = await goalSet.execute("call-sure-approval", { setup_id: setup.id, confirmed: true, objective: RICH_OBJECTIVE }, undefined, undefined, harness.ctx);
-	assert.match(sureApproval.content[0].text, /"status": "active"/);
+
+	// goal_set without goal_present first should fail
+	const noPresent = await goalSet.execute("call-no-present", { setup_id: setup.id, confirmed: true, objective: RICH_OBJECTIVE }, undefined, undefined, harness.ctx);
+	assert.match(noPresent.content[0].text, /goal_set requires a contract presentation via goal_present/);
+
+	// goal_present with malformed objective (missing labels)
+	const malformedPresent = await goalPresent.execute("call-malformed-present", { objective: "Do stuff" }, undefined, undefined, harness.ctx);
+	assert.match(malformedPresent.content[0].text, /Outcome:/);
+
+	// goal_present with valid objective
+	await goalPresent.execute("call-valid-present", { objective: RICH_OBJECTIVE }, undefined, undefined, harness.ctx);
+
+	// goal_set with different objective than presented
+	const different = await goalSet.execute("call-different", { setup_id: setup.id, confirmed: true, objective: RICH_OBJECTIVE.replace("redesign", "revise") }, undefined, undefined, harness.ctx);
+	assert.ok(different.content[0].text.includes("present"), "contract/presentation error: " + different.content[0].text);
+
+	// goal_set with matching objective + confirmed succeeds
+	const success = await goalSet.execute("call-success", { setup_id: setup.id, confirmed: true, objective: RICH_OBJECTIVE }, undefined, undefined, harness.ctx);
+	assert.match(success.content[0].text, /"status": "active"/);
+
 	await harness.command.handler("cancel", harness.ctx);
-	const setupAfterSure = await startSetup(harness, "redesign goal setup --token-budget 100");
-	appendAssistantContractSummary(harness);
-	appendUserApproval(harness);
-	const nullBudgetOverride = await goalSet.execute("call-null-budget-override", { setup_id: setupAfterSure.id, confirmed: true, objective: RICH_OBJECTIVE, token_budget: null }, undefined, undefined, harness.ctx);
+	const setup2 = await startSetup(harness, "redesign goal setup --token-budget 100");
+	await goalPresent.execute("call-valid-present-2", { objective: RICH_OBJECTIVE }, undefined, undefined, harness.ctx);
+
+	const nullBudgetOverride = await goalSet.execute("call-null-budget-override", { setup_id: setup2.id, confirmed: true, objective: RICH_OBJECTIVE, token_budget: null }, undefined, undefined, harness.ctx);
 	assert.match(nullBudgetOverride.content[0].text, /cannot override/);
-	const budgetOverride = await goalSet.execute("call-budget-override", { setup_id: setupAfterSure.id, confirmed: true, objective: RICH_OBJECTIVE, token_budget: 999 }, undefined, undefined, harness.ctx);
+
+	const budgetOverride = await goalSet.execute("call-budget-override", { setup_id: setup2.id, confirmed: true, objective: RICH_OBJECTIVE, token_budget: 999 }, undefined, undefined, harness.ctx);
 	assert.match(budgetOverride.content[0].text, /cannot override/);
-	const malformed = await goalSet.execute("call-malformed", { setup_id: setupAfterSure.id, confirmed: true, objective: "Do stuff" }, undefined, undefined, harness.ctx);
-	assert.match(malformed.content[0].text, /Outcome:/);
 });
 
 test("goal_set activates a confirmed rich objective and queues continuation", async () => {
 	const harness = await createHarness();
 	const setup = await startSetup(harness, "redesign goal setup --token-budget 1500");
-	appendAssistantContractSummaryParts(harness);
-	appendUserApproval(harness);
+	await harness.tool("goal_present").execute("call-present", { objective: RICH_OBJECTIVE }, undefined, undefined, harness.ctx);
 	harness.sentMessages.length = 0;
 	await harness.tool("goal_set").execute("call-set", { setup_id: setup.id, confirmed: true, objective: RICH_OBJECTIVE }, undefined, undefined, harness.ctx);
 	const goal = latestGoalEntry(harness).data.goal;
@@ -449,19 +451,20 @@ test("ignores malformed persisted goal entries during session restore", async ()
 
 
 test("goal_set rejects replacing an active goal", async () => {
+	const createdAt = "2026-05-01T00:00:00.000Z";
 	const setup = {
 		id: "setup-replace",
 		generation: 2,
 		intent: "replacement attempt",
 		tokenBudget: null,
 		phase: "interviewing",
-		createdAt: "2026-05-01T00:00:00.000Z",
-		updatedAt: "2026-05-01T00:00:00.000Z",
+		contractPresentedAt: createdAt,
+		contractObjective: RICH_OBJECTIVE,
+		createdAt,
+		updatedAt: createdAt,
 	};
 	const entry = goalEntry({ id: "active-goal", setup });
-	const summary = { type: "message", message: { role: "assistant", content: RICH_OBJECTIVE } };
-	const approval = { type: "message", message: { role: "user", content: "approved" } };
-	const harness = await createHarness({ entries: [entry, summary, approval], branchEntries: [entry, summary, approval] });
+	const harness = await createHarness({ entries: [entry], branchEntries: [entry] });
 	await harness.emit("session_start", { reason: "startup" });
 	const result = await harness.tool("goal_set").execute("call-active", { setup_id: setup.id, confirmed: true, objective: RICH_OBJECTIVE }, undefined, undefined, harness.ctx);
 	assert.match(result.content[0].text, /already active/);
@@ -504,10 +507,9 @@ test("prompt wrappers escape user-controlled XML-like content", async () => {
 		"Decision philosophy: prefer safety.",
 		"Ask-before boundaries: ask before publishing.",
 	].join("\n");
-	appendAssistantContractSummary(harness, objective);
-	appendUserApproval(harness);
-	harness.sentMessages.length = 0;
 	const setup = latestGoalEntry(harness).data.setup;
+	await harness.tool("goal_present").execute("call-present", { objective }, undefined, undefined, harness.ctx);
+	harness.sentMessages.length = 0;
 	await harness.tool("goal_set").execute("call-escaped", { setup_id: setup.id, confirmed: true, objective }, undefined, undefined, harness.ctx);
 	assert.match(harness.sentMessages.at(-1).message.content, /keep &lt;tags&gt; literal/);
 });

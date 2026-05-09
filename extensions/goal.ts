@@ -239,43 +239,29 @@ export default function goalExtension(pi: ExtensionAPI) {
 		return JSON.stringify({ ...details(), ...extra }, null, 2);
 	}
 
-	function hasConfirmedContractAfterSetup(ctx: ExtensionContext, currentSetup: GoalSetupState, objective: string): boolean {
-		const branch = ctx.sessionManager.getBranch();
-		const setupIndex = branch.findIndex((entry) => isGoalEntryForSetup(entry, currentSetup.id));
-		if (setupIndex === -1) return false;
-		const afterSetup = branch.slice(setupIndex + 1);
-		const summaryIndex = afterSetup.findLastIndex(isAssistantContractSummaryEntry);
-		if (summaryIndex === -1) return false;
-		if (!summaryApprovesObjective(afterSetup[summaryIndex], objective)) return false;
-		return afterSetup.slice(summaryIndex + 1).some(isUserApprovalEntry);
-	}
-
-	function isGoalEntryForSetup(entry: unknown, setupId: string): boolean {
-		if (!isRecord(entry) || entry.type !== "custom" || entry.customType !== GOAL_ENTRY_TYPE) return false;
-		const data = entry.data;
-		if (!isRecord(data) || !isRecord(data.setup)) return false;
-		return data.setup.id === setupId;
-	}
-
-	function isAssistantContractSummaryEntry(entry: unknown): boolean {
-		if (entryRole(entry) !== "assistant") return false;
-		const content = entryContent(entry);
-		return ["Outcome:", "Done criteria:", "Decision philosophy:", "Ask-before boundaries:"].every((label) => content.includes(label));
-	}
-
-	function summaryApprovesObjective(entry: unknown, objective: string): boolean {
-		return normalizeContractText(entryContent(entry)).includes(normalizeContractText(objective));
-	}
-
-	function normalizeContractText(value: string): string {
-		return value.toLowerCase().replace(/\s+/g, " ").trim();
+	function hasConfirmedContractAfterSetup(currentSetup: GoalSetupState, objective: string): boolean {
+		// Explicit state check — no branch scanning.
+		// Agent calls goal_present when presenting the contract (records timestamp + objective).
+		// Agent calls goal_set with confirmed=true after user says "yes".
+		if (!currentSetup.contractPresentedAt) {
+			emitDebugEvent("goal_set.check_fail", "contract not presented (goal_present not called)", "hasConfirmedContractAfterSetup", {});
+			return false;
+		}
+		if (currentSetup.contractObjective !== objective) {
+			emitDebugEvent("goal_set.check_fail", "presented objective does not match goal_set objective", "hasConfirmedContractAfterSetup", {
+				presented: currentSetup.contractObjective,
+				requested: objective,
+			});
+			return false;
+		}
+		return true;
 	}
 
 	function isUserApprovalEntry(entry: unknown): boolean {
 		if (entryRole(entry) !== "user") return false;
 		const content = entryContent(entry).trim();
 		if (/\b(not approved|not yet|hold off|wait|do not proceed|don't proceed|do not activate|don't activate|reject|rejected|denied|stop)\b/i.test(content)) return false;
-		return /^(yes|sure|ok|okay|approved|approve|confirmed|confirm|proceed|do it|activate|looks good|lgtm)(?:\b|[.!])/i.test(content) || /\b(please proceed|looks good to me|approved,? proceed)\b/i.test(content);
+		return /^(yes|sure|ok|okay|approved|approve|confirmed|confirm|y|proceed|do it|activate|looks good|lgtm)(?:\b|[.!])/i.test(content) || /\b(please proceed|looks good to me|approved,? proceed)\b/i.test(content);
 	}
 
 	function entryRole(entry: unknown): string | null {
@@ -448,9 +434,9 @@ export default function goalExtension(pi: ExtensionAPI) {
 				auditGoalMutation("goal.set", setup.id, "denied", validationError);
 				return { content: [{ type: "text", text: validationError }], details: details() };
 			}
-			if (!hasConfirmedContractAfterSetup(ctx, setup, objective)) {
+			if (!hasConfirmedContractAfterSetup(setup, objective)) {
 				auditGoalMutation("goal.set", setup.id, "denied", "missing_contract_summary_or_approval");
-				return { content: [{ type: "text", text: "goal_set requires an assistant contract summary followed by explicit user approval." }], details: details() };
+				return { content: [{ type: "text", text: "goal_set requires a contract presentation via goal_present with a matching objective before activation." }], details: details() };
 			}
 			if (tokenBudgetProvided && requestedTokenBudget !== tokenBudget) {
 				auditGoalMutation("goal.set", setup.id, "denied", "token_budget_override");
@@ -528,6 +514,35 @@ Do not mark a goal complete merely because its budget is nearly exhausted or bec
 			auditGoalMutation("goal.complete", goal.id, "success");
 			const report = completionBudgetReport(goal);
 			return { content: [{ type: "text", text: detailsText({ completionBudgetReport: report }) }], details: details() };
+		},
+	});
+
+	const GoalPresentParams = Type.Object({
+		objective: Type.String(),
+	});
+
+	pi.registerTool<typeof GoalPresentParams, GoalToolDetails>({
+		name: "goal_present",
+		label: "Present Goal Contract",
+		description: "Call this tool when you present the contract summary (Outcome, Done criteria, Decision philosophy, Ask-before boundaries) to the user. Records that the contract was presented and what objective was shown.",
+		promptSnippet: "Call goal_present with the full objective string right when you present the contract to the user.",
+		parameters: GoalPresentParams,
+		executionMode: "sequential",
+		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+			if (!setup) {
+				return { content: [{ type: "text", text: "No active goal setup. Run /goal first." }], details: details() };
+			}
+			const objective = sanitizeObjective(params.objective);
+			const validationError = validateObjective(objective);
+			if (validationError) {
+				return { content: [{ type: "text", text: validationError }], details: details() };
+			}
+			setup.contractPresentedAt = nowIso();
+			setup.contractObjective = objective;
+			emitDebugEvent("goal.present", "Contract presented to user", "goal_present", { objectivePreview: objective.slice(0, 80) });
+			auditGoalMutation("goal.present", setup.id, "success");
+			setState(goal, setup, ctx);
+			return { content: [{ type: "text", text: "Contract presentation recorded." }], details: details() };
 		},
 	});
 

@@ -17,6 +17,8 @@ export const newSetup = (intent: string, tokenBudget: number | null, generation:
 		intent,
 		tokenBudget,
 		phase: "interviewing",
+		contractPresentedAt: null,
+		contractObjective: null,
 		createdAt: timestamp,
 		updatedAt: timestamp,
 	};
@@ -153,6 +155,8 @@ const isGoalSetupState = (value: unknown): value is GoalSetupState => {
 		typeof value.intent === "string" &&
 		(value.tokenBudget === null || isPositiveInteger(value.tokenBudget)) &&
 		isSetupPhase(value.phase) &&
+		(value.contractPresentedAt === null || typeof value.contractPresentedAt === "string") &&
+		(value.contractObjective === null || typeof value.contractObjective === "string") &&
 		typeof value.createdAt === "string" &&
 		typeof value.updatedAt === "string"
 	);

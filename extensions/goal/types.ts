@@ -8,6 +8,8 @@ export interface GoalSetupState {
 	intent: string;
 	tokenBudget: number | null;
 	phase: SetupPhase;
+	contractPresentedAt: string | null;
+	contractObjective: string | null;
 	createdAt: string;
 	updatedAt: string;
 }
