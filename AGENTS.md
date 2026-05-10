@@ -21,7 +21,8 @@ This extension gives Pi a setup-first Codex-like long-running goal mode: Huy sta
 | Path | Role |
 |------|------|
 | `extensions/goal.ts` | Runtime entrypoint for `/goal`, goal tools, continuation prompts, state persistence, and status-line UI |
-| `index.test.mjs` | Regression coverage for setup, tools, continuation, persistence, command parsing, and stop conditions |
+| `index.test.ts` | Regression coverage for setup, tools, continuation, persistence, command parsing, and stop conditions |
+| `messages.test.ts` | Unit tests for structured toolResponse helper, success response format, and message constant stability |
 | `.github/workflows/publish.yml` | Trusted publishing workflow projected into the public release repo |
 | `package.json` | Pi package manifest, gallery metadata, and npm publishing metadata |
 | `assets/pi-goal-status.png` | Pi package gallery preview image |
@@ -34,6 +35,8 @@ This extension gives Pi a setup-first Codex-like long-running goal mode: Huy sta
 | `/goal` command behavior | `extensions/goal.ts` |
 | Goal/setup state entry schema | `extensions/goal/types.ts` / `extensions/goal/state.ts` |
 | Agent-facing `goal_set`, `goal_get`, `goal_status_line`, and `goal_complete` tools | `extensions/goal.ts` |
+| Setup interview prompt with phase-by-phase approval | `extensions/goal/prompts.ts` \`setupPrompt()\` |
+| Structured tool response messages and write-dev-logs constants | `extensions/goal/messages.ts` |
 | Setup nudge prompt | `extensions/goal/prompts.ts` `setupPrompt()` |
 | Automatic continuation prompt | `extensions/goal/prompts.ts` `continuationPrompt()` |
 | Budget wrap-up prompt | `extensions/goal/prompts.ts` `budgetLimitPrompt()` |
@@ -59,8 +62,8 @@ This package intentionally does not use Varlock yet.
 | Rule | Behavior |
 |------|----------|
 | Setup-first activation | `/goal <intent>` starts setup mode and never activates directly |
-| Setup contract | Setup must resolve outcome, done criteria, decision philosophy, and ask-before boundaries |
-| Confirmation gate | `goal_set` requires the latest setup id, `confirmed: true`, and a labeled rich objective string |
+| Setup contract | Setup must resolve outcome, done criteria, MUST DO, AVOID, decision philosophy, and ask-before boundaries in phase-by-phase approval |
+| Confirmation gate | `goal_set` requires `confirmed: true` and a labeled rich objective string (setup is a singleton — no id needed) |
 | One active objective | Starting a new setup while an incomplete goal exists must reject with “cancel first” |
 | Autonomous continuation | Active goals must schedule hidden follow-up turns while Pi is idle and no user messages are pending |
 | User input wins | Never continue over queued or pending user input |
@@ -79,7 +82,7 @@ This package intentionally does not use Varlock yet.
 | Setup prompt behavior | Prove setup nudge includes the four contract parts and forbids premature `goal_set` |
 | Tool schema or tool behavior | Verify `goal_set`, `goal_get`, `goal_status_line`, and `goal_complete` registration and completion-only behavior |
 | Prompt text changes | Check that the objective remains wrapped as untrusted data and that completion still requires an evidence audit |
-| Any TypeScript edit | Run `npm test`, `npm run verify:pi`, and `npm run verify:package` from the package root |
+| Any TypeScript edit | Run `npm test` (tsx-powered), `npm run verify:pi`, and `npm run verify:package` from the package root |
 | Package manifest, gallery asset, README, or publish workflow edit | Run `npm run verify:package` and `npm run pack:dry-run` from the package root |
 
 ## Testing Strategy

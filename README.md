@@ -123,6 +123,7 @@ npm run pack:dry-run
 | `package.json` | npm metadata and Pi package manifest |
 | `assets/pi-goal-status.png` | Pi package gallery preview image |
 | `extensions/goal.ts` | Pi extension entrypoint |
-| `extensions/goal/` | State, prompt, format, and debug helpers |
-| `index.test.mjs` | Regression tests |
+| `extensions/goal/` | State, prompt, format, debug, and structured message helpers |
+| `index.test.ts` | Regression tests |
+| `messages.test.ts` | Structured message and toolResponse helper tests |
 | `.github/workflows/publish.yml` | Trusted publishing workflow |
