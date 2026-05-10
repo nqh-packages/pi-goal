@@ -1,11 +1,12 @@
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import { randomUUID } from "node:crypto";
+import { STATUS_LINE } from "./messages.js";
 import { GOAL_ENTRY_TYPE, type BlockedReason, type GoalEntry, type GoalSetupState, type GoalState, type GoalStatus, type SetupPhase } from "./types.js";
 
 const GOAL_STATUSES = new Set<GoalStatus>(["active", "paused", "budget_limited", "complete"]);
 const SETUP_PHASES = new Set<SetupPhase>(["interviewing", "cancelled"]);
 const BLOCKED_REASONS = new Set<Exclude<BlockedReason, null>>(["no_work", "budget", "waiting_on_user"]);
-const REQUIRED_OBJECTIVE_LABELS = ["Outcome:", "Done criteria:", "Decision philosophy:", "Ask-before boundaries:"];
+const REQUIRED_OBJECTIVE_LABELS = ["Outcome:", "Done criteria:", "MUST DO:", "AVOID:", "Decision philosophy:", "Ask-before boundaries:"];
 
 export const nowIso = (): string => new Date().toISOString();
 
@@ -44,7 +45,7 @@ export const newGoal = (objective: string, tokenBudget: number | null, generatio
 		updatedAt: timestamp,
 		continuationSuppressed: false,
 		lastContinuationTurnHadNoTools: false,
-		statusLine: "starting goal",
+		statusLine: STATUS_LINE.STARTING,
 		blockedReason: null,
 	};
 };
@@ -86,7 +87,7 @@ export const completeGoal = (goal: GoalState): GoalState => {
 	goal.continuationSuppressed = true;
 	goal.lastContinuationTurnHadNoTools = false;
 	goal.blockedReason = null;
-	goal.statusLine = "goal complete";
+	goal.statusLine = STATUS_LINE.GOAL_COMPLETE;
 	goal.updatedAt = nowIso();
 	return goal;
 };
@@ -98,7 +99,7 @@ export const applyBudgetLimit = (goal: GoalState): boolean => {
 	goal.status = "budget_limited";
 	goal.blockedReason = "budget";
 	goal.continuationSuppressed = true;
-	goal.statusLine = "budget limit reached";
+	goal.statusLine = STATUS_LINE.BUDGET_LIMIT;
 	goal.updatedAt = nowIso();
 	return true;
 };

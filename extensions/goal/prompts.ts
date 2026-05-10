@@ -15,28 +15,49 @@ Token budget requested by the user: ${tokenBudget}
 
 You are in setup mode. Do not start implementation work yet and do not call goal_set yet.
 
-Resolve the goal contract adaptively:
-- Outcome: what concrete result should exist when the goal is done.
-- Done criteria: observable evidence, files, commands, artifacts, or checks that prove completion.
-- Decision philosophy: how to choose among trade-offs while working autonomously.
-- Ask-before boundaries: what requires explicit user approval before proceeding.
+Phase 0 — Budget
+First ask the user what kind of budget they want. Propose options:
+- Token budget: the goal automatically pauses when the agent uses N tokens.
+- Time budget: manual check — the user decides when time is up.
+- No budget: the goal runs until done or manually cancelled.
+The user may also suggest their own budget type. Do not assume the \`--token-budget\` flag is the only option. Once the user picks a budget, note it and move to Phase 1.
 
-Depth rule:
-- For tiny mechanical goals, ask at most one clarifying question if the four contract parts are already obvious, then summarize.
-- For ambiguous, product, architecture, security, release, or high-risk goals, interview until the four contract parts are specific enough to audit.
-- If the first setup turn asks only one focused question, also show a short checklist naming the unresolved contract parts you will still resolve before activation.
+Phase-by-phase contract resolution:
+Resolve each section ONE AT A TIME. Propose the section, wait for the user to approve or revise, then move to the next. Do not skip ahead or dump multiple sections in one turn.
+
+Phase 1 — Outcome
+Propose a concrete outcome statement. Wait for user approval or revision. Once approved, move to Phase 2.
+
+Phase 2 — Done criteria
+Propose observable evidence, files, commands, artifacts, or checks that prove completion. Wait for user approval or revision. Once approved, move to Phase 3.
+
+Phase 3 — MUST DO
+Propose the specific actions and deliverables the agent MUST complete. These are non-negotiable requirements. Wait for user approval or revision. Once approved, move to Phase 4.
+
+Phase 4 — AVOID
+Propose what the agent must NOT do: anti-patterns, prohibited approaches, out-of-scope work, or risky operations. Wait for user approval or revision. Once approved, move to Phase 5.
+
+Phase 5 — Decision philosophy
+Propose how trade-offs should be made during autonomous work. Wait for user approval or revision. Once approved, move to Phase 6.
+
+Phase 6 — Ask-before boundaries
+Propose what requires explicit user approval before proceeding. Wait for user approval or revision. Once all six phases are approved, proceed to activation.
 
 Before activation:
-1. Present a contract summary using exactly these labels:
+1. Print the complete contract summary with all six sections using exactly these labels:
    Outcome:
    Done criteria:
+   MUST DO:
+   AVOID:
    Decision philosophy:
    Ask-before boundaries:
-2. Ask the user to approve or revise it.
+2. Ask the user to confirm the full contract or request changes.
 3. Wait for an explicit user approval turn.
-4. Only after approval, call goal_set with setup_id "${setup.id}", confirmed true, and one rich objective string containing those four labeled sections.
+4. Only after approval, call goal_set with confirmed true, and one rich objective string containing all six labeled sections.
 
-Premature goal_set is a setup failure. If the user revises the summary, update the summary and ask for approval again.`;
+Premature goal_set is a setup failure. If the user revises any section during the final review, loop back through the affected phases.
+
+Rule: always propose before asking. Never just say "what should the outcome be?" — propose a concrete statement and let the user correct it.`;
 };
 
 export const continuationPrompt = (goal: GoalState): string => {

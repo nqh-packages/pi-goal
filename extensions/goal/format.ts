@@ -1,3 +1,4 @@
+import { STATUS_LINE } from "./messages.js";
 import type { GoalSetupState, GoalState } from "./types.js";
 
 const CLOCK_FRAMES = ["◴", "◷", "◶", "◵"] as const;
@@ -46,28 +47,28 @@ export const goalStatusLine = (goal: GoalState, frameIndex = 0): string => {
 	const progress = truncateSingleLine(goal.statusLine || fallbackProgress(goal), MAX_STATUS_TEXT);
 	switch (goal.status) {
 		case "active":
-			if (goal.blockedReason === "waiting_on_user") return statusChrome(progress === "answer needed" ? "? answer needed" : `? answer needed: ${progress}`);
-			if (goal.blockedReason === "no_work" || goal.continuationSuppressed) return statusChrome("BLOCKED! no progress — /goal resume");
+			if (goal.blockedReason === "waiting_on_user") return statusChrome(progress === STATUS_LINE.ANSWER_NEEDED ? "? waiting" : `? waiting: ${progress}`);
+			if (goal.blockedReason === "no_work" || goal.continuationSuppressed) return statusChrome("blocked: no progress, /goal resume");
 			return statusChrome(`${yellow(CLOCK_FRAMES[frameIndex % CLOCK_FRAMES.length])} ${progress}`);
 		case "paused":
-			return statusChrome(`Ⅱ paused: ${progress}`);
+			return statusChrome(`paused: ${progress}`);
 		case "budget_limited":
-			return statusChrome("BLOCKED! budget limit reached");
+			return statusChrome("blocked: budget used");
 		case "complete":
-			return statusChrome("✓ goal complete");
+			return statusChrome("✓ done");
 	}
 };
 
 export const goalStatusPanel = (goal: GoalState, setup: GoalSetupState | null = null): string => {
 	const rows = [
 		`Goal: ${statusLabel(goal)}`,
-		`Objective: ${goal.objective}`,
+		`${goal.objective}`,
 		`Progress: ${goal.statusLine || fallbackProgress(goal)}`,
-		`Time: ${formatElapsed(goal.timeUsedSeconds)}`,
+		`Time elapsed: ${formatElapsed(goal.timeUsedSeconds)}`,
 	];
-	if (goal.tokenBudget !== null) rows.push(`Tokens: ${formatTokens(goal.tokensUsed)}/${formatTokens(goal.tokenBudget)}`);
-	if (goal.blockedReason) rows.push(`Blocked reason: ${goal.blockedReason}`);
-	if (setup) rows.push(`Setup: ${setup.phase} (${setup.id})`);
+	if (goal.tokenBudget !== null) rows.push(`Budget: ${formatTokens(goal.tokensUsed)}/${formatTokens(goal.tokenBudget)} tokens used`);
+	if (goal.blockedReason) rows.push(`Blocked: ${blockedLabel(goal.blockedReason)}`);
+	if (setup) rows.push(`Setup: ${setup.phase}`);
 	rows.push("Commands: /goal status, /goal pause, /goal resume, /goal cancel, /goal help");
 	return rows.join("\n");
 };
@@ -77,8 +78,8 @@ export const setupStatusPanel = (setup: GoalSetupState): string =>
 		"Goal setup in progress.",
 		`Intent: ${setup.intent}`,
 		`Setup id: ${setup.id}`,
-		setup.tokenBudget === null ? "Token budget: none" : `Token budget: ${setup.tokenBudget}`,
-		"Next: answer the assistant's setup questions, then approve the contract summary.",
+		setup.tokenBudget === null ? "Budget: none set" : `Budget: ${setup.tokenBudget} tokens`,
+		"Next: the assistant will walk through each contract phase for your approval.",
 		"Commands: /goal status, /goal cancel, /goal help",
 	].join("\n");
 
@@ -91,8 +92,17 @@ export const helpText = (): string =>
 		"/goal cancel",
 		"/goal help",
 		"",
-		"/goal <intent> starts setup first. The assistant must interview, summarize the contract, get your approval, then call goal_set.",
+		"/goal <intent> starts setup first. The assistant asks about budget type, then proposes each contract section (Outcome, Done criteria, MUST DO, AVOID, Decision philosophy, Ask-before boundaries) one by one for your approval before calling goal_set.",
 	].join("\n");
+
+const blockedLabel = (reason: string): string => {
+	switch (reason) {
+		case "no_work": return "no progress made";
+		case "budget": return "budget used";
+		case "waiting_on_user": return "waiting for your answer";
+		default: return reason;
+	}
+};
 
 const statusLabel = (goal: GoalState): string => {
 	switch (goal.status) {
@@ -108,8 +118,8 @@ const statusLabel = (goal: GoalState): string => {
 };
 
 const fallbackProgress = (goal: GoalState): string => {
-	if (goal.status === "budget_limited") return "budget limit reached";
-	if (goal.status === "complete") return "done";
+	if (goal.status === "budget_limited") return STATUS_LINE.BUDGET_LIMIT;
+	if (goal.status === "complete") return STATUS_LINE.GOAL_COMPLETE;
 	return "working";
 };
 

@@ -2,8 +2,9 @@ import { StringEnum } from "@mariozechner/pi-ai";
 import type { ExtensionAPI, ExtensionContext, TurnEndEvent } from "@mariozechner/pi-coding-agent";
 import { Type } from "typebox";
 import { GOAL_DEBUG_ENTRY_TYPE, GOAL_DEBUG_EVENT_TYPE, goalDebugEvent, latestGoalDebugEntry } from "./goal/debug.js";
-import { completionBudgetReport, goalStatusLine, goalStatusPanel, helpText, remainingTokens, setupStatusLine, setupStatusPanel } from "./goal/format.js";
+import { completionBudgetReport, goalStatusLine, goalStatusPanel, remainingTokens, setupStatusLine } from "./goal/format.js";
 import { budgetLimitPrompt, continuationPrompt, setupPrompt } from "./goal/prompts.js";
+import { AUDIT_ACTIONS, AUDIT_OUTCOMES, EVENTS, GOAL_COMPLETE_ERRORS, GOAL_PRESENT_ERRORS, GOAL_SET_ERRORS, GOAL_STATUS_LINE_ERRORS, HELP, NOTIFY, STATUS_LINE, VALIDATION_ERRORS, setupPanel, toolResponse, toolSuccessResponse } from "./goal/messages.js";
 import {
 	addAssistantTurnUsage,
 	applyBudgetLimit,
@@ -21,7 +22,6 @@ import {
 import { GOAL_CONTEXT_TYPE, GOAL_CONTINUATION_TYPE, GOAL_ENTRY_TYPE, GOAL_SETUP_TYPE, STATUS_KEY, type BlockedReason, type GoalEntry, type GoalSetupState, type GoalState, type GoalToolDetails } from "./goal/types.js";
 
 const GoalSetParams = Type.Object({
-	setup_id: Type.String(),
 	confirmed: Type.Boolean(),
 	objective: Type.String(),
 });
@@ -37,7 +37,6 @@ const GoalCompleteParams = Type.Object({
 const STATUS_HEARTBEAT_MS = 500;
 
 type GoalSetParams = {
-	setup_id: string;
 	confirmed: boolean;
 	objective: string;
 	token_budget?: number | null;
@@ -188,7 +187,7 @@ export default function goalExtension(pi: ExtensionAPI) {
 		if (!ctx.isIdle() && reason !== "agent_end") return;
 
 		continuationTurnPending = true;
-		emitDebugEvent("goal.continuation_queued", "Goal continuation queued", "queue_continuation", { reason });
+		emitDebugEvent(EVENTS.CONTINUATION_QUEUED, "Goal continuation queued", "queue_continuation", { reason });
 		pi.sendMessage(
 			{
 				customType: GOAL_CONTINUATION_TYPE,
@@ -244,11 +243,11 @@ export default function goalExtension(pi: ExtensionAPI) {
 		// Agent calls goal_present when presenting the contract (records timestamp + objective).
 		// Agent calls goal_set with confirmed=true after user says "yes".
 		if (!currentSetup.contractPresentedAt) {
-			emitDebugEvent("goal_set.check_fail", "contract not presented (goal_present not called)", "hasConfirmedContractAfterSetup", {});
+			emitDebugEvent(EVENTS.SETUP_CHECK_FAIL, "contract not presented (goal_present not called)", "hasConfirmedContractAfterSetup", {});
 			return false;
 		}
 		if (currentSetup.contractObjective !== objective) {
-			emitDebugEvent("goal_set.check_fail", "presented objective does not match goal_set objective", "hasConfirmedContractAfterSetup", {
+			emitDebugEvent(EVENTS.SETUP_CHECK_FAIL, "presented objective does not match goal_set objective", "hasConfirmedContractAfterSetup", {
 				presented: currentSetup.contractObjective,
 				requested: objective,
 			});
@@ -308,40 +307,40 @@ export default function goalExtension(pi: ExtensionAPI) {
 				if (goal) {
 					ctx.ui.notify(goalStatusPanel(goal, setup), "info");
 				} else if (setup && setup.phase !== "cancelled") {
-					ctx.ui.notify(setupStatusPanel(setup), "info");
+					ctx.ui.notify(setupPanel(setup.id, setup.intent, setup.tokenBudget).join("\n"), "info");
 				} else {
-					ctx.ui.notify("No goal is currently set. Usage: /goal <intent>", "info");
+					ctx.ui.notify(NOTIFY.NO_GOAL.text, NOTIFY.NO_GOAL.type);
 				}
 				renderStatus(ctx);
 				return;
 			}
 
 			if (command === "help") {
-				ctx.ui.notify(helpText(), "info");
+				ctx.ui.notify(HELP, "info");
 				return;
 			}
 
 			if (["clear", "complete", "done", "unpause", "debug", "debug on", "debug off", "debug status"].includes(command)) {
-				ctx.ui.notify(`Unsupported /goal command: ${trimmed}. Use /goal help.`, "warning");
+				ctx.ui.notify(NOTIFY.LEGACY_COMMAND(trimmed).text, NOTIFY.LEGACY_COMMAND(trimmed).type);
 				return;
 			}
 
 			if (command === "cancel") {
-				emitDebugEvent("goal.cancelled", "Goal cancelled by user command", "goal_command");
-				auditGoalMutation("goal.cancel", goal?.id ?? setup?.id ?? null, "success");
+				emitDebugEvent(EVENTS.GOAL_CANCELLED, "Goal cancelled by user command", "goal_command");
+				auditGoalMutation(AUDIT_ACTIONS.GOAL_CANCEL, goal?.id ?? setup?.id ?? null, AUDIT_OUTCOMES.SUCCESS);
 				goal = null;
 				setup = null;
 				continuationTurnPending = false;
 				continuationTurnActive = false;
 				clearDoneStatusOnAgentEnd = false;
 				setState(null, null, ctx);
-				ctx.ui.notify("Goal cancelled", "info");
+				ctx.ui.notify(NOTIFY.GOAL_CANCELLED.text, NOTIFY.GOAL_CANCELLED.type);
 				return;
 			}
 
 			if (command === "pause") {
 				if (!goal) {
-					ctx.ui.notify("No active goal to pause.", "warning");
+					ctx.ui.notify(NOTIFY.NO_PAUSE_TARGET.text, NOTIFY.NO_PAUSE_TARGET.type);
 					return;
 				}
 				accountElapsed(ctx);
@@ -351,24 +350,24 @@ export default function goalExtension(pi: ExtensionAPI) {
 				continuationTurnPending = false;
 				continuationTurnActive = false;
 				setState(goal, setup, ctx);
-				emitDebugEvent("goal.paused", "Goal paused by user command", "goal_command");
-				auditGoalMutation("goal.pause", goal.id, "success");
-				ctx.ui.notify("Goal paused", "info");
+				emitDebugEvent(EVENTS.GOAL_PAUSED, "Goal paused by user command", "goal_command");
+				auditGoalMutation(AUDIT_ACTIONS.GOAL_PAUSE, goal.id, AUDIT_OUTCOMES.SUCCESS);
+				ctx.ui.notify(NOTIFY.GOAL_PAUSED.text, NOTIFY.GOAL_PAUSED.type);
 				return;
 			}
 
 			if (command === "resume") {
 				if (!goal) {
-					ctx.ui.notify("No active goal to resume.", "warning");
+					ctx.ui.notify(NOTIFY.NO_RESUME_TARGET.text, NOTIFY.NO_RESUME_TARGET.type);
 					return;
 				}
 				if (goal.blockedReason === "waiting_on_user") {
-					ctx.ui.notify("Goal needs a user answer before it can resume.", "warning");
+					ctx.ui.notify(NOTIFY.WAITING_ON_USER.text, NOTIFY.WAITING_ON_USER.type);
 					renderStatus(ctx);
 					return;
 				}
 				if (goal.status === "budget_limited") {
-					ctx.ui.notify("Goal reached its token budget. Complete it if done or cancel it.", "warning");
+					ctx.ui.notify(NOTIFY.BUDGET_LIMITED.text, NOTIFY.BUDGET_LIMITED.type);
 					renderStatus(ctx);
 					return;
 				}
@@ -376,17 +375,17 @@ export default function goalExtension(pi: ExtensionAPI) {
 				goal.blockedReason = null;
 				goal.continuationSuppressed = false;
 				goal.lastContinuationTurnHadNoTools = false;
-				goal.statusLine = goal.statusLine || "resuming";
+				goal.statusLine = goal.statusLine || STATUS_LINE.RESUMING;
 				setState(goal, setup, ctx);
-				emitDebugEvent("goal.resumed", "Goal resumed by user command", "goal_command");
-				auditGoalMutation("goal.resume", goal.id, "success");
-				ctx.ui.notify("Goal active", "info");
+				emitDebugEvent(EVENTS.GOAL_RESUMED, "Goal resumed by user command", "goal_command");
+				auditGoalMutation(AUDIT_ACTIONS.GOAL_RESUME, goal.id, AUDIT_OUTCOMES.SUCCESS);
+				ctx.ui.notify(NOTIFY.GOAL_ACTIVE.text, NOTIFY.GOAL_ACTIVE.type);
 				queueContinuation(ctx, "command");
 				return;
 			}
 
 			if (goal && goal.status !== "complete") {
-				ctx.ui.notify("A goal is already active. Use /goal cancel before starting a new setup.", "warning");
+				ctx.ui.notify(NOTIFY.ACTIVE_EXISTS.text, NOTIFY.ACTIVE_EXISTS.type);
 				renderStatus(ctx);
 				return;
 			}
@@ -398,9 +397,9 @@ export default function goalExtension(pi: ExtensionAPI) {
 			}
 			const nextSetup = newSetup(parsed.intent, parsed.tokenBudget, generation + 1);
 			setState(null, nextSetup, ctx);
-			emitDebugEvent("goal.setup_started", "Goal setup started by user command", "goal_command", { tokenBudget: parsed.tokenBudget });
-			auditGoalMutation("goal.setup.start", nextSetup.id, "success");
-			ctx.ui.notify("Goal setup started. Answer the assistant's questions, approve the contract summary, then Pi can activate the goal.", "info");
+			emitDebugEvent(EVENTS.SETUP_STARTED, "Goal setup started by user command", "goal_command", { tokenBudget: parsed.tokenBudget });
+			auditGoalMutation(AUDIT_ACTIONS.SETUP_START, nextSetup.id, AUDIT_OUTCOMES.SUCCESS);
+			ctx.ui.notify(NOTIFY.SETUP_STARTED.text, NOTIFY.SETUP_STARTED.type);
 			queueSetup(ctx, nextSetup);
 		},
 	});
@@ -419,39 +418,43 @@ export default function goalExtension(pi: ExtensionAPI) {
 			const tokenBudget = setup?.tokenBudget ?? null;
 			const validationError = validateObjective(objective) ?? validateTokenBudget(requestedTokenBudget);
 			if (!setup || setup.phase === "cancelled") {
-				auditGoalMutation("goal.set", null, "denied", "missing_setup");
-				return { content: [{ type: "text", text: "goal_set requires an active /goal setup." }], details: details() };
-			}
-			if (params.setup_id !== setup.id) {
-				auditGoalMutation("goal.set", setup.id, "denied", "stale_setup_id");
-				return { content: [{ type: "text", text: "goal_set setup_id is stale or does not match the latest setup." }], details: details() };
+				auditGoalMutation(AUDIT_ACTIONS.GOAL_SET_SUCCESS, null, AUDIT_OUTCOMES.DENIED, GOAL_SET_ERRORS.NO_SETUP.error_code);
+				return toolResponse(GOAL_SET_ERRORS.NO_SETUP, details());
 			}
 			if (!params.confirmed) {
-				auditGoalMutation("goal.set", setup.id, "denied", "not_confirmed");
-				return { content: [{ type: "text", text: "goal_set requires confirmed=true after explicit user approval." }], details: details() };
+				auditGoalMutation(AUDIT_ACTIONS.GOAL_SET_SUCCESS, setup.id, AUDIT_OUTCOMES.DENIED, GOAL_SET_ERRORS.NOT_CONFIRMED.error_code);
+				return toolResponse(GOAL_SET_ERRORS.NOT_CONFIRMED, details());
 			}
 			if (validationError) {
-				auditGoalMutation("goal.set", setup.id, "denied", validationError);
-				return { content: [{ type: "text", text: validationError }], details: details() };
+				auditGoalMutation(AUDIT_ACTIONS.GOAL_SET_SUCCESS, setup.id, AUDIT_OUTCOMES.DENIED, validationError);
+				return toolResponse({
+					type: "https://pi.local/goal/error/validation",
+					title: "Validation error",
+					status: "rejected",
+					error_code: "GOAL_SET_VALIDATION",
+					detail: validationError,
+					context: {},
+					suggestions: ["Check the objective format and required labels."],
+				}, details());
 			}
 			if (!hasConfirmedContractAfterSetup(setup, objective)) {
-				auditGoalMutation("goal.set", setup.id, "denied", "missing_contract_summary_or_approval");
-				return { content: [{ type: "text", text: "goal_set requires a contract presentation via goal_present with a matching objective before activation." }], details: details() };
+				auditGoalMutation(AUDIT_ACTIONS.GOAL_SET_SUCCESS, setup.id, AUDIT_OUTCOMES.DENIED, GOAL_SET_ERRORS.NO_CONTRACT_PRESENTED.error_code);
+				return toolResponse(GOAL_SET_ERRORS.NO_CONTRACT_PRESENTED, details());
 			}
 			if (tokenBudgetProvided && requestedTokenBudget !== tokenBudget) {
-				auditGoalMutation("goal.set", setup.id, "denied", "token_budget_override");
-				return { content: [{ type: "text", text: "goal_set cannot override the user setup token budget." }], details: details() };
+				auditGoalMutation(AUDIT_ACTIONS.GOAL_SET_SUCCESS, setup.id, AUDIT_OUTCOMES.DENIED, GOAL_SET_ERRORS.BUDGET_OVERRIDE(tokenBudget).error_code);
+				return toolResponse(GOAL_SET_ERRORS.BUDGET_OVERRIDE(tokenBudget), details());
 			}
 			if (goal && goal.status !== "complete") {
-				auditGoalMutation("goal.set", goal.id, "denied", "active_goal_exists");
-				return { content: [{ type: "text", text: "A goal is already active. The user must run /goal cancel first." }], details: details() };
+				auditGoalMutation(AUDIT_ACTIONS.GOAL_SET_SUCCESS, goal.id, AUDIT_OUTCOMES.DENIED, GOAL_SET_ERRORS.ACTIVE_GOAL_EXISTS.error_code);
+				return toolResponse(GOAL_SET_ERRORS.ACTIVE_GOAL_EXISTS, details());
 			}
 			const nextGoal = newGoal(objective, tokenBudget, setup.generation);
 			setState(nextGoal, null, ctx);
-			emitDebugEvent("goal.started", "Goal activated from confirmed setup", "goal_set", { tokenBudget });
-			auditGoalMutation("goal.set", nextGoal.id, "success");
+			emitDebugEvent(EVENTS.GOAL_STARTED, "Goal activated from confirmed setup", "goal_set", { tokenBudget });
+			auditGoalMutation(AUDIT_ACTIONS.GOAL_SET_SUCCESS, nextGoal.id, AUDIT_OUTCOMES.SUCCESS);
 			queueContinuation(ctx, "command");
-			return { content: [{ type: "text", text: detailsText() }], details: details() };
+			return toolSuccessResponse(details());
 		},
 	});
 
@@ -475,15 +478,23 @@ export default function goalExtension(pi: ExtensionAPI) {
 		executionMode: "sequential",
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 			if (!goal || goal.status !== "active") {
-				return { content: [{ type: "text", text: "No active goal can receive status-line progress." }], details: details() };
+				return toolResponse(GOAL_STATUS_LINE_ERRORS.NO_ACTIVE_GOAL, details());
 			}
 			if (goal.blockedReason) {
-				return { content: [{ type: "text", text: `Goal status line cannot update while blocked (${goal.blockedReason}).` }], details: details() };
+				return toolResponse(GOAL_STATUS_LINE_ERRORS.BLOCKED(goal.blockedReason), details());
 			}
 			const text = params.text.trim();
 			const validationError = validateProgressText(text);
 			if (validationError) {
-				return { content: [{ type: "text", text: validationError }], details: details() };
+				return toolResponse({
+					type: "https://pi.local/goal/error/validation",
+					title: "Validation error",
+					status: "rejected",
+					error_code: "GOAL_STATUS_VALIDATION",
+					detail: validationError,
+					context: {},
+					suggestions: ["Check the status line text format."],
+				}, details());
 			}
 			goal.statusLine = text;
 			setState(goal, setup, ctx);
@@ -502,18 +513,18 @@ Do not mark a goal complete merely because its budget is nearly exhausted or bec
 		executionMode: "sequential",
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 			if (params.status !== "complete") {
-				return { content: [{ type: "text", text: "goal_complete can only set status to complete." }], details: details() };
+				return toolResponse(GOAL_COMPLETE_ERRORS.WRONG_STATUS, details());
 			}
 			if (!goal) {
-				return { content: [{ type: "text", text: "No goal is currently set." }], details: details() };
+				return toolResponse(GOAL_COMPLETE_ERRORS.NO_GOAL, details());
 			}
 			accountElapsed(ctx);
 			completeGoal(goal);
 			setState(goal, setup, ctx);
 			clearDoneStatusOnAgentEnd = true;
-			auditGoalMutation("goal.complete", goal.id, "success");
+			auditGoalMutation(AUDIT_ACTIONS.GOAL_COMPLETE, goal.id, AUDIT_OUTCOMES.SUCCESS);
 			const report = completionBudgetReport(goal);
-			return { content: [{ type: "text", text: detailsText({ completionBudgetReport: report }) }], details: details() };
+			return toolSuccessResponse(details());
 		},
 	});
 
@@ -530,19 +541,27 @@ Do not mark a goal complete merely because its budget is nearly exhausted or bec
 		executionMode: "sequential",
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 			if (!setup) {
-				return { content: [{ type: "text", text: "No active goal setup. Run /goal first." }], details: details() };
+				return toolResponse(GOAL_PRESENT_ERRORS.NO_SETUP, details());
 			}
 			const objective = sanitizeObjective(params.objective);
 			const validationError = validateObjective(objective);
 			if (validationError) {
-				return { content: [{ type: "text", text: validationError }], details: details() };
+				return toolResponse({
+					type: "https://pi.local/goal/error/validation",
+					title: "Validation error",
+					status: "rejected",
+					error_code: "GOAL_PRESENT_VALIDATION",
+					detail: validationError,
+					context: {},
+					suggestions: ["Check the objective format and required labels."],
+				}, details());
 			}
 			setup.contractPresentedAt = nowIso();
 			setup.contractObjective = objective;
-			emitDebugEvent("goal.present", "Contract presented to user", "goal_present", { objectivePreview: objective.slice(0, 80) });
-			auditGoalMutation("goal.present", setup.id, "success");
+			emitDebugEvent(EVENTS.GOAL_PRESENTED, "Contract presented to user", "goal_present", { objectivePreview: objective.slice(0, 80) });
+			auditGoalMutation(AUDIT_ACTIONS.GOAL_PRESENT, setup.id, AUDIT_OUTCOMES.SUCCESS);
 			setState(goal, setup, ctx);
-			return { content: [{ type: "text", text: "Contract presentation recorded." }], details: details() };
+			return toolSuccessResponse(details());
 		},
 	});
 
@@ -566,7 +585,7 @@ Do not mark a goal complete merely because its budget is nearly exhausted or bec
 			setState(goal, setup, ctx);
 		}
 		if (goal?.status === "active" && (event.reason === "startup" || event.reason === "resume")) {
-			emitDebugEvent("goal.restored", "Active goal restored from session branch", "session_start", { reason: event.reason });
+			emitDebugEvent(EVENTS.GOAL_RESTORED, "Active goal restored from session branch", "session_start", { reason: event.reason });
 			queueMicrotask(() => queueContinuation(ctx, "resume"));
 		}
 	});
@@ -603,7 +622,7 @@ Do not mark a goal complete merely because its budget is nearly exhausted or bec
 		addAssistantTurnUsage(goal, event.message);
 		if (applyBudgetLimit(goal)) {
 			setState(goal, setup, ctx);
-			emitDebugEvent("goal.budget_limited", "Goal reached token budget", "turn_end", { tokensUsed: goal.tokensUsed, tokenBudget: goal.tokenBudget });
+			emitDebugEvent(EVENTS.BUDGET_LIMITED, "Goal reached token budget", "turn_end", { tokensUsed: goal.tokensUsed, tokenBudget: goal.tokenBudget });
 			pi.sendMessage(
 				{
 					customType: GOAL_CONTEXT_TYPE,
@@ -639,10 +658,10 @@ Do not mark a goal complete merely because its budget is nearly exhausted or bec
 			goal.continuationSuppressed = true;
 			goal.lastContinuationTurnHadNoTools = true;
 			goal.blockedReason = "no_work";
-			goal.statusLine = "no progress";
+			goal.statusLine = STATUS_LINE.NO_PROGRESS;
 			setState(goal, setup, ctx);
-			emitDebugEvent("goal.continuation_suppressed", "Goal continuation paused after a no-tool automatic turn", "agent_end");
-			ctx.ui.notify("Goal continuation paused because the last automatic turn made no tool calls. Use /goal resume to continue.", "warning");
+			emitDebugEvent(EVENTS.CONTINUATION_SUPPRESSED, "Goal continuation paused after a no-tool automatic turn", "agent_end");
+			ctx.ui.notify(NOTIFY.NO_WORK_SUPPRESSED.text, NOTIFY.NO_WORK_SUPPRESSED.type);
 			return;
 		}
 		queueContinuation(ctx, "agent_end");

@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.4.0 (2026-05-10)
+
+the setup flow was too dumpy. first version just dropped a whole contract block and said "approve or revise". agents would write a massive wall, users would skim, nobody caught the missing bits.
+
+split everything into phases now. agent proposes one section, user approves, on to the next. budget, outcome, criteria, must do, avoid, philosophy, boundaries — one at a time. also added MUST DO and AVOID because the contract was missing the guardrails.
+
+### What changed
+
+- **Phase-by-phase setup.** Budget is Phase 0 now — agent asks what kind of budget you want instead of assuming `--token-budget`. Then Outcome, Done criteria, MUST DO, AVOID, Decision philosophy, Ask-before boundaries. Each one gets its own propose-approve cycle.
+- **MUST DO and AVOID** are now required contract sections. Every objective must include all six labels.
+- **`goal_set` dropped `setup_id`.** LLMs hallucinate UUIDs in tool calls. Now it just uses the one active setup — there's only ever one.
+- **All tool responses are structured JSON.** Every error has `type`, `error_code`, `detail`, `suggestions`. No more plain strings. Agents can self-heal from the response.
+- **Test suite went from monolithic to modular.** 81 tests across 5 files, split by concern (command, goal-set, goal-complete, goal-status, lifecycle). Plus 14 dedicated message-format tests.
+- **write-dev-logs everywhere.** Inline strings extracted to typed constants in `messages.ts`. Status line strings, debug event names, audit action names, notification text — all referenced by constant, not hardcoded.
+
+### Verification
+
+```bash
+node --import tsx --test tests/*.test.ts messages.test.ts  # 81 pass, 0 fail
+```
+
 ## v0.3.0 (2026-05-09)
 
 Been debugging this for a while. The contract verification had an architectural problem — it was trying to reconstruct what happened by scraping the session branch, which meant it broke whenever the message ordering didn't match its assumptions. One of those bugs you fix three times before realizing the approach itself is wrong.
@@ -18,7 +39,7 @@ Been debugging this for a while. The contract verification had an architectural 
 ### Verification
 
 ```bash
-node --test index.test.mjs  # 21 pass, 1 skipped (UI capture)
+node --import tsx --test index.test.ts messages.test.ts  # 35 pass, 1 skipped (UI capture)
 ```
 
 ## v0.2.0 (2026-05-02)
