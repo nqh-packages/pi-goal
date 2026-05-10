@@ -30,8 +30,8 @@ test("/goal intent starts setup mode without activating a goal", async () => {
 	assert.match(harness.sentMessages[0].message.content, /Phase 1.*Outcome/);
 	assert.match(harness.sentMessages[0].message.content, /Phase 3.*MUST DO/);
 	assert.match(harness.sentMessages[0].message.content, /Phase 4.*AVOID/);
-	assert.match(harness.sentMessages[0].message.content, /Only after approval, call goal_set with confirmed true/);
-	assert.match(harness.sentMessages[0].message.content, /confirmed true/);
+	assert.match(harness.sentMessages[0].message.content, /After goal_present succeeds, call goal_set with confirmed=true/);
+	assert.match(harness.sentMessages[0].message.content, /confirmed=true/);
 	assert.doesNotMatch(harness.sentMessages[0].message.content, /token_budget/);
 	const entry = latestGoalEntry(harness).data;
 	assert.equal(entry.goal, null);

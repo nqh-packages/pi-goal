@@ -407,8 +407,8 @@ export default function goalExtension(pi: ExtensionAPI) {
 	pi.registerTool<typeof GoalSetParams, GoalToolDetails>({
 		name: "goal_set",
 		label: "Set Goal",
-		description: "Activate the latest user-approved goal setup with one rich objective string. Do not pass token_budget; the runtime uses the user's /goal setup budget.",
-		promptSnippet: "goal_set: activate a confirmed setup after the user approves the contract summary. Omit token_budget entirely.",
+		description: "Activate the latest user-approved goal setup with one rich objective string. Must call goal_present FIRST to record the contract, THEN call goal_set with the same objective. Do not pass token_budget; the runtime uses the user's /goal setup budget.",
+		promptSnippet: "goal_set: activate a confirmed setup after the user approves the contract summary. Requires goal_present FIRST, then goal_set. Omit token_budget entirely.",
 		parameters: GoalSetParams,
 		executionMode: "sequential",
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {

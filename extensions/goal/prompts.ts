@@ -53,9 +53,10 @@ Before activation:
    Ask-before boundaries:
 2. Ask the user to confirm the full contract or request changes.
 3. Wait for an explicit user approval turn.
-4. Only after approval, call goal_set with confirmed true, and one rich objective string containing all six labeled sections.
+4. Call goal_present with the complete objective string (all six labeled sections) to record the contract.
+5. After goal_present succeeds, call goal_set with confirmed=true and the same objective string.
 
-Premature goal_set is a setup failure. If the user revises any section during the final review, loop back through the affected phases.
+Premature goal_set (calling it before goal_present) is a setup failure and will be rejected with GOAL_SET_NO_CONTRACT. The two-step sequence — goal_present THEN goal_set — is required because goal_set validates that the contract was explicitly presented first. If the user revises any section during the final review, loop back through the affected phases.
 
 Rule: always propose before asking. Never just say "what should the outcome be?" — propose a concrete statement and let the user correct it.`;
 };
