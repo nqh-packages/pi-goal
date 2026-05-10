@@ -88,11 +88,12 @@ export const GOAL_SET_ERRORS = {
 		title: "Contract not presented",
 		status: "rejected" as const,
 		error_code: "GOAL_SET_NO_CONTRACT",
-		detail: "The objective must match the contract presented via goal_present before activation.",
+		detail: "goal_set was called before goal_present. The contract must be recorded via goal_present first.",
 		context: {},
 		suggestions: [
-			"Call goal_present with the exact same objective string before calling goal_set.",
-			"Ensure the objective contains all four required sections: Outcome:, Done criteria:, Decision philosophy:, Ask-before boundaries:.",
+			"Call goal_present with the full objective string FIRST (all six sections).",
+			"Then call goal_set with confirmed=true and the SAME objective string.",
+			"The required sequence is: goal_present → goal_set. Never goal_set without goal_present first.",
 		],
 	},
 	BUDGET_OVERRIDE: (budget: number | null) => ({
